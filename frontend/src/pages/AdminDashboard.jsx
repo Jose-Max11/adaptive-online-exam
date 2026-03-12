@@ -12,12 +12,20 @@ import ThemeSwitcher from '../components/ThemeSwitcher';
 const SECTIONS = ['Overview', 'Students', 'Exams', 'Questions', 'Results', 'Behavior'];
 const SECTION_ICONS = { Overview: '🏠', Students: '👥', Exams: '📋', Questions: '❓', Results: '📊', Behavior: '🧠' };
 
+// ── Constant empty state so we always reset to a fresh object reference ──
+const EMPTY_STUDENT = {
+    name: '', email: '', password: '', rollno: '', gender: '',
+    age: '', phone_number: '', department: '', year_of_study: '',
+    college: '', impairment_type: ''
+};
+
 export default function AdminDashboard() {
     const navigate = useNavigate();
     const { theme: t } = useTheme();
     const adminName = localStorage.getItem('name') || 'Admin';
     const [section, setSection] = useState('Overview');
     const fileInputRef = useRef(null);
+    const studentFormRef = useRef(null); // ← ref to the <form> for native reset
 
     const [students, setStudents] = useState([]);
     const [exams, setExams] = useState([]);
@@ -28,15 +36,14 @@ export default function AdminDashboard() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    const [studentForm, setStudentForm] = useState({
-        name: '', email: '', password: '', rollno: '', gender: '', age: '',
-        phone_number: '', department: '', year_of_study: '', college: '', impairment_type: ''
-    });
+    // Always initialise from the constant so references are fresh
+    const [studentForm, setStudentForm] = useState({ ...EMPTY_STUDENT });
     const [examForm, setExamForm] = useState({ title: '', duration: 60, total_questions: 10, difficulty_distribution: { easy: 4, medium: 4, hard: 2 } });
     const [assignForm, setAssignForm] = useState({ examId: '', studentIds: [] });
     const [qBulk, setQBulk] = useState('');
 
     useEffect(() => { loadAll(); }, []);
+
     const loadAll = async () => {
         setLoading(true);
         try {
@@ -55,13 +62,19 @@ export default function AdminDashboard() {
 
     const handleLogout = () => { localStorage.clear(); navigate('/'); };
 
+    // ── FIX: reset state + native form so the form is fully clean each time ──
     const handleCreateStudent = async (e) => {
         e.preventDefault();
+        const payload = { ...studentForm }; // snapshot before reset
         try {
-            await createStudent(studentForm);
-            setStudentForm({ name: '', email: '', password: '', rollno: '', gender: '', age: '', phone_number: '', department: '', year_of_study: '', college: '', impairment_type: '' });
-            flash('Student created!'); loadAll();
-        } catch (err) { flash(err.response?.data?.message || 'Error creating student', true); }
+            await createStudent(payload);
+            setStudentForm({ ...EMPTY_STUDENT });         // reset controlled state
+            if (studentFormRef.current) studentFormRef.current.reset(); // reset native form (clears file inputs etc.)
+            flash('Student created!');
+            await loadAll();
+        } catch (err) {
+            flash(err.response?.data?.message || 'Error creating student', true);
+        }
     };
 
     const handleBulkUploadStudents = async (e) => {
@@ -420,7 +433,8 @@ export default function AdminDashboard() {
 
                                 <div className="ad-card">
                                     <div className="ad-card-title">Add New Student</div>
-                                    <form onSubmit={handleCreateStudent}>
+                                    {/* ── ref added so we can call .reset() after submit ── */}
+                                    <form ref={studentFormRef} onSubmit={handleCreateStudent}>
                                         <div className="ad-form-grid">
                                             {[
                                                 { ph: 'Full Name *', key: 'name', type: 'text', req: true },
@@ -436,10 +450,10 @@ export default function AdminDashboard() {
                                             ].map(({ ph, key, type, req }) => (
                                                 <input key={key} className="ad-input" placeholder={ph} type={type}
                                                     value={studentForm[key]} required={req}
-                                                    onChange={e => setStudentForm({ ...studentForm, [key]: e.target.value })} />
+                                                    onChange={e => setStudentForm(prev => ({ ...prev, [key]: e.target.value }))} />
                                             ))}
                                             <select className="ad-select" value={studentForm.gender}
-                                                onChange={e => setStudentForm({ ...studentForm, gender: e.target.value })}>
+                                                onChange={e => setStudentForm(prev => ({ ...prev, gender: e.target.value }))}>
                                                 <option value="">Select Gender</option>
                                                 <option value="Male">Male</option>
                                                 <option value="Female">Female</option>
